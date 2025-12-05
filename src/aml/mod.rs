@@ -155,7 +155,7 @@ where
         info!("acpid: loading SSDTs"); // 追加
         for (i, ssdt) in platform.tables.ssdts().enumerate() {
             info!("acpid: loading SSDT {}", i); // 追加
-            load_table(&interpreter, ssdt, &format!("SSDT-{}", i))?;
+            load_table(&interpreter, ssdt, &alloc::format!("SSDT-{}", i))?;
         }
 
         Ok(interpreter)
