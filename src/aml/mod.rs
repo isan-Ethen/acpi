@@ -23,11 +23,7 @@ pub mod pci_routing;
 pub mod resource;
 
 use crate::{
-    AcpiError,
-    AmlTable,
-    Handle,
-    Handler,
-    PhysicalMapping,
+    AcpiError, AmlTable, Handle, Handler, PhysicalMapping,
     platform::AcpiPlatform,
     registers::{FixedRegisters, Pm1ControlBit},
     sdt::{SdtHeader, facs::Facs, fadt::Fadt},
@@ -42,25 +38,15 @@ use alloc::{
 };
 use bit_field::BitField;
 use core::{
-    mem,
-    slice,
+    mem, slice,
     str::{self, FromStr},
     sync::atomic::{AtomicU64, Ordering},
 };
 use log::{info, trace, warn};
 use namespace::{AmlName, Namespace, NamespaceLevelKind};
 use object::{
-    DeviceStatus,
-    FieldFlags,
-    FieldUnit,
-    FieldUnitKind,
-    FieldUpdateRule,
-    MethodFlags,
-    Object,
-    ObjectToken,
-    ObjectType,
-    ReferenceKind,
-    WrappedObject,
+    DeviceStatus, FieldFlags, FieldUnit, FieldUnitKind, FieldUpdateRule, MethodFlags, Object, ObjectToken,
+    ObjectType, ReferenceKind, WrappedObject,
 };
 use op_region::{OpRegion, RegionHandler, RegionSpace};
 use pci_types::PciAddress;
@@ -123,17 +109,29 @@ where
     /// Construct a new `Interpreter` with the given set of ACPI tables. This will automatically
     /// load the DSDT and any SSDTs in the supplied [`AcpiTables`].
     pub fn new_from_platform(platform: &AcpiPlatform<H>) -> Result<Interpreter<H>, AcpiError> {
-        fn load_table(interpreter: &Interpreter<impl Handler>, table: AmlTable) -> Result<(), AcpiError> {
+        // 内部関数 load_table にログを追加
+        fn load_table(
+            interpreter: &Interpreter<impl Handler>,
+            table: AmlTable,
+            name: &str,
+        ) -> Result<(), AcpiError> {
+            info!("acpid: mapping table {}", name); // 追加
             let mapping = unsafe {
                 interpreter.handler.map_physical_region::<SdtHeader>(table.phys_address, table.length as usize)
             };
+
+            info!("acpid: creating stream for {}", name); // 追加
             let stream = unsafe {
                 slice::from_raw_parts(
                     mapping.virtual_start.as_ptr().byte_add(mem::size_of::<SdtHeader>()) as *const u8,
                     table.length as usize - mem::size_of::<SdtHeader>(),
                 )
             };
+
+            info!("acpid: executing AML for {}", name); // 追加
             interpreter.load_table(stream).map_err(AcpiError::Aml)?;
+
+            info!("acpid: finished table {}", name); // 追加
             Ok(())
         }
 
@@ -146,12 +144,18 @@ where
             )
         };
 
+        info!("acpid: finding DSDT"); // 追加
         let dsdt = platform.tables.dsdt()?;
         let interpreter = Interpreter::new(platform.handler.clone(), dsdt.revision, registers, facs);
-        load_table(&interpreter, dsdt)?;
 
-        for ssdt in platform.tables.ssdts() {
-            load_table(&interpreter, ssdt)?;
+        // DSDT のロード
+        info!("acpid: loading DSDT"); // 追加
+        load_table(&interpreter, dsdt, "DSDT")?;
+
+        info!("acpid: loading SSDTs"); // 追加
+        for (i, ssdt) in platform.tables.ssdts().enumerate() {
+            info!("acpid: loading SSDT {}", i); // 追加
+            load_table(&interpreter, ssdt, &format!("SSDT-{}", i))?;
         }
 
         Ok(interpreter)
